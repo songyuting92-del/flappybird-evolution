@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flappy 小鸟进化实验室</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #0b1020; color: #e2e8f0; font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif; }
+  header { display: flex; align-items: center; flex-wrap: wrap; gap: 14px 28px; padding: 14px 24px 10px; }
+  h1 { margin: 0; font-size: 32px; letter-spacing: 2px; color: #fde047; }
+  .stats { display: flex; flex-wrap: wrap; gap: 12px; }
+  .stat { background: #151d35; border: 1px solid #26314f; border-radius: 12px; padding: 6px 16px; font-size: 22px; white-space: nowrap; }
+  .stat b { font-size: 30px; color: #67e8f9; margin: 0 4px; font-variant-numeric: tabular-nums; }
+  .stat.best b { color: #fde047; }
+  .main { display: grid; grid-template-columns: auto 1fr; gap: 18px; padding: 0 24px; align-items: start; }
+  #game { height: min(62vh, 640px); aspect-ratio: 480 / 640; border-radius: 14px; border: 2px solid #26314f; display: block; cursor: pointer; }
+  .side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .panel { background: #111832; border: 1px solid #26314f; border-radius: 14px; padding: 10px 14px; }
+  .panel h2 { margin: 0 0 6px; font-size: 22px; color: #a5b4fc; font-weight: 600; }
+  #nn { height: min(38vh, 380px); width: auto; max-width: 100%; aspect-ratio: 600 / 360; display: block; margin: 0 auto; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; }
+  button { font: inherit; font-size: 22px; padding: 8px 20px; border-radius: 10px; border: 2px solid #334155; background: #1e293b; color: #e2e8f0; cursor: pointer; }
+  button:hover { border-color: #67e8f9; }
+  button.active { background: #0e7490; border-color: #67e8f9; color: #fff; }
+  .rules { font-size: 17px; line-height: 1.6; color: #cbd5e1; }
+  .rules span.p { color: #22d3ee; font-weight: bold; }
+  .rules span.n { color: #fb7185; font-weight: bold; }
+  .rules span.g { color: #fde047; font-weight: bold; }
+  .bottom { padding: 10px 24px 14px; }
+  .bottom .panel h2 { font-size: 20px; margin-bottom: 2px; }
+  #curve { width: 100%; height: min(20vh, 210px); display: block; }
+  .stat.goal b { color: #4ade80; }
+  .controls .label { font-size: 20px; color: #94a3b8; align-self: center; margin-left: 6px; }
+  .controls .sep { width: 2px; background: #26314f; margin: 0 4px; }
+  .curve-head { display: flex; align-items: baseline; gap: 22px; flex-wrap: wrap; }
+  .legend { font-size: 17px; color: #94a3b8; }
+  .legend i { display: inline-block; width: 26px; height: 4px; vertical-align: middle; margin: 0 6px 0 14px; border-radius: 2px; }
+  #dataDlg { position: fixed; inset: 0; background: rgba(3,6,18,0.78); display: none; align-items: center; justify-content: center; z-index: 10; }
+  #dataDlg.show { display: flex; }
+  .dlg { width: min(1200px, 94vw); max-height: 90vh; display: flex; flex-direction: column; background: #111832; border: 2px solid #334155; border-radius: 16px; padding: 18px 22px; }
+  .dlg h2 { margin: 0 0 10px; font-size: 28px; color: #fde047; }
+  .dlg h3 { margin: 14px 0 6px; font-size: 21px; color: #a5b4fc; }
+  .summary { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px 16px; font-size: 19px; }
+  .summary div b { color: #67e8f9; }
+  .tablewrap { overflow: auto; flex: 1; min-height: 160px; border: 1px solid #26314f; border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 18px; font-variant-numeric: tabular-nums; }
+  th, td { padding: 6px 12px; text-align: right; border-bottom: 1px solid #1e293b; white-space: nowrap; }
+  th { position: sticky; top: 0; background: #1e293b; color: #a5b4fc; }
+  td.ok { color: #4ade80; font-weight: bold; }
+  td.dead { color: #94a3b8; }
+  .dlg .row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+  .dlg .hint { font-size: 16px; color: #94a3b8; margin-top: 8px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Flappy 小鸟进化实验室</h1>
+  <div class="stats">
+    <div class="stat">第<b id="sGen">1</b>代</div>
+    <div class="stat">存活<b id="sAlive">50/50</b></div>
+    <div class="stat">本代过管<b id="sPipes">0</b></div>
+    <div class="stat best">历史最佳过管<b id="sBest">0</b></div>
+    <div class="stat goal">首次达标<b id="sGoal">—</b></div>
+  </div>
+</header>
+
+<div class="main">
+  <canvas id="game" width="480" height="640"></canvas>
+  <div class="side">
+    <div class="panel">
+      <h2 id="nnTitle">当前冠军鸟的大脑（4-6-2 神经网络）</h2>
+      <canvas id="nn" width="600" height="360"></canvas>
+    </div>
+    <div class="panel controls">
+      <button data-speed="1" class="active">速度 ×1</button>
+      <button data-speed="4">×4</button>
+      <button data-speed="16">×16</button>
+      <button id="btnPause">暂停</button>
+      <button id="btnReset">重新开始</button>
+      <button id="btnHuman">我来试玩</button>
+      <button id="btnData">实验数据</button>
+    </div>
+    <div class="panel controls">
+      <span class="label">过管上限（达到即算“毕业”，进入下一代）：</span>
+      <button data-cap="20">20</button>
+      <button data-cap="50" class="active">50</button>
+      <button data-cap="200">200</button>
+      <button data-cap="0">不限</button>
+    </div>
+    <div class="panel rules">
+      连线：<span class="p">青色 = 正权重</span>，<span class="n">粉色 = 负权重</span>，越粗权重越大。输出“跳”大于“不跳”时小鸟起跳。<br>
+      进化：按“存活时间 + 过管奖励”排序，<span class="g">前 2 名原样保留（金色描边）</span>；其余每次从前 12 名随机抽 2 只、取更强者克隆，再以 10% 概率、0.35 幅度变异。
+    </div>
+  </div>
+</div>
+
+<div class="bottom">
+  <div class="panel">
+    <div class="curve-head">
+      <h2>进化曲线：每代最佳过管数</h2>
+      <span class="legend"><i style="background:#fde047"></i>本代最佳<i style="background:#22d3ee"></i>本代平均<i style="background:#4ade80"></i>过管上限 / 达标代</span>
+    </div>
+    <canvas id="curve" width="1400" height="210"></canvas>
+  </div>
+</div>
+
+<div id="dataDlg">
+  <div class="dlg">
+    <h2>实验数据记录</h2>
+    <div class="summary" id="summary"></div>
+    <h3>过程数据：每一代的成绩（最新的在最上面）</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>代数</th><th>最佳过管</th><th>平均过管</th><th>过 1 管以上的鸟</th><th>结束时存活</th><th>本代时长(帧)</th><th>最佳适应度</th><th>结束方式</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="row">
+      <button id="btnCSV">导出过程数据 CSV（Excel 可打开）</button>
+      <button id="btnJSON">导出完整实验 JSON（含参数和冠军基因）</button>
+      <button id="btnClose">关闭</button>
+    </div>
+    <div class="hint">CSV：每代一行，用 Excel/WPS 打开可自己画图。JSON：实验参数 + 每代记录 + 每代冠军的 44 个权重，是这次实验的“最终数据”，可存档或对比不同班级的实验。</div>
+  </div>
+</div>
+
+<script>
+const W = 480, H = 640, GROUND = 80, PLAY_H = H - GROUND;
+const BIRD_X = 110, BIRD_R = 14;
+const GRAVITY = 0.45, JUMP_V = -7.5, MAX_VY = 10;
+const PIPE_W = 70, GAP = 160, PIPE_SPEED = 3, PIPE_SPACING = 240;
+const FIRST_PIPE_X = BIRD_X + 200 * PIPE_SPEED;
+const POP = 50, ELITE = 2, POOL = 12, MUT_RATE = 0.1, MUT_AMP = 0.35;
+const PASS_REWARD = 200;
+const NI = 4, NH = 6, NO = 2;
+const GENES = NH * (NI + 1) + NO * (NH + 1);
+
+function randn() {
+  let u = 0, v = 0;
+  while (!u) u = Math.random();
+  while (!v) v = Math.random();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+class Brain {
+  constructor(genes) {
+    this.g = genes ? genes.slice() : Array.from({ length: GENES }, () => Math.random() * 2 - 1);
+    this.inp = [0, 0, 0, 0];
+    this.h = new Array(NH).fill(0);
+    this.o = [0, 0];
+  }
+  wIH(i, j) { return this.g[j * (NI + 1) + i]; }
+  wHO(i, j) { return this.g[NH * (NI + 1) + j * (NH + 1) + i]; }
+  think(inp) {
+    const g = this.g;
+    let k = 0;
+    this.inp = inp;
+    for (let j = 0; j < NH; j++) {
+      let s = 0;
+      for (let i = 0; i < NI; i++) s += inp[i] * g[k++];
+      s += g[k++];
+      this.h[j] = Math.tanh(s);
+    }
+    for (let j = 0; j < NO; j++) {
+      let s = 0;
+      for (let i = 0; i < NH; i++) s += this.h[i] * g[k++];
+      s += g[k++];
+      this.o[j] = Math.tanh(s);
+    }
+    return this.o[0] > this.o[1];
+  }
+  mutate() {
+    for (let k = 0; k < this.g.length; k++) {
+      if (Math.random() < MUT_RATE) this.g[k] += randn() * MUT_AMP;
+    }
+  }
+}
+
+function makeBird(brain, id, elite) {
+  return { id, brain, elite: !!elite, y: PLAY_H / 2, vy: 0, alive: true, frames: 0, pipes: 0, fitness: 0, hue: (id * 47) % 360, flap: 0 };
+}
+
+function randomGapY(prev) {
+  const lo = GAP / 2 + 50, hi = PLAY_H - GAP / 2 - 50;
+  let y = lo + Math.random() * (hi - lo);
+  if (prev !== undefined) y = Math.max(prev - 200, Math.min(prev + 200, y));
+  return y;
+}
+
+function makeWorld(birds) {
+  const w = { birds, pipes: [], frame: 0, passed: 0 };
+  w.pipes.push({ x: FIRST_PIPE_X, gapY: randomGapY(), passed: false });
+  fillPipes(w);
+  return w;
+}
+
+function fillPipes(w) {
+  let last = w.pipes[w.pipes.length - 1];
+  while (last.x < W + PIPE_W + PIPE_SPACING) {
+    last = { x: last.x + PIPE_SPACING, gapY: randomGapY(last.gapY), passed: false };
+    w.pipes.push(last);
+  }
+}
+
+function nextPipe(w) {
+  for (const p of w.pipes) if (p.x + PIPE_W > BIRD_X - BIRD_R) return p;
+  return w.pipes[w.pipes.length - 1];
+}
+
+function senses(b, p) {
+  return [
+    (b.y / PLAY_H) * 2 - 1,
+    b.vy / MAX_VY,
+    (p.x + PIPE_W - BIRD_X) / W,
+    (p.gapY / PLAY_H) * 2 - 1
+  ];
+}
+
+function hits(b, p) {
+  const r = BIRD_R * 0.85;
+  if (BIRD_X + r < p.x || BIRD_X - r > p.x + PIPE_W) return false;
+  return b.y - r < p.gapY - GAP / 2 || b.y + r > p.gapY + GAP / 2;
+}
+
+function step(w, humanJump) {
+  w.frame++;
+  for (const p of w.pipes) p.x -= PIPE_SPEED;
+  while (w.pipes.length && w.pipes[0].x + PIPE_W < -10) w.pipes.shift();
+  fillPipes(w);
+
+  const p = nextPipe(w);
+  for (const b of w.birds) {
+    if (!b.alive) continue;
+    let jump = false;
+    if (b.brain) jump = b.brain.think(senses(b, p));
+    else if (humanJump) jump = true;
+    if (jump) { b.vy = JUMP_V; b.flap = 8; }
+    b.vy = Math.min(MAX_VY, b.vy + GRAVITY);
+    b.y += b.vy;
+    if (b.flap > 0) b.flap--;
+    if (b.y < BIRD_R) { b.y = BIRD_R; b.vy = 0; }
+    b.frames++;
+    if (b.y + BIRD_R >= PLAY_H || hits(b, p)) {
+      b.alive = false;
+      if (b.y + BIRD_R > PLAY_H) b.y = PLAY_H - BIRD_R;
+    }
+  }
+
+  for (const q of w.pipes) {
+    if (!q.passed && q.x + PIPE_W < BIRD_X - BIRD_R) {
+      q.passed = true;
+      w.passed++;
+      for (const b of w.birds) if (b.alive) b.pipes++;
+    }
+  }
+  for (const b of w.birds) b.fitness = b.frames + b.pipes * PASS_REWARD;
+}
+
+function aliveCount(w) { let n = 0; for (const b of w.birds) if (b.alive) n++; return n; }
+
+function evolve(birds) {
+  const ranked = birds.slice().sort((a, b) => b.fitness - a.fitness);
+  const next = [];
+  for (let i = 0; i < ELITE; i++) next.push(makeBird(new Brain(ranked[i].brain.g), next.length, true));
+  const pool = ranked.slice(0, POOL);
+  while (next.length < POP) {
+    const a = pool[Math.floor(Math.random() * pool.length)];
+    const c = pool[Math.floor(Math.random() * pool.length)];
+    const parent = a.fitness >= c.fitness ? a : c;
+    const child = new Brain(parent.brain.g);
+    child.mutate();
+    next.push(makeBird(child, next.length, false));
+  }
+  return next;
+}
+
+let gen, ai, history, records, bestEver, firstGoalGen, startTime, banner = null;
+let speed = 1, paused = false, humanMode = false, human = null, humanJumpQueued = false;
+let passCap = 50;
+
+function resetAI() {
+  gen = 1;
+  history = [];
+  records = [];
+  bestEver = 0;
+  firstGoalGen = null;
+  startTime = new Date();
+  banner = null;
+  const birds = [];
+  for (let i = 0; i < POP; i++) birds.push(makeBird(new Brain(), i, false));
+  ai = makeWorld(birds);
+}
+
+function resetHuman() {
+  human = makeWorld([makeBird(null, 0, false)]);
+  human.started = false;
+}
+
+function finishGeneration(graduated) {
+  const birds = ai.birds;
+  const ranked = birds.slice().sort((a, b) => b.fitness - a.fitness);
+  const best = ranked.reduce((m, b) => Math.max(m, b.pipes), 0);
+  const sumPipes = birds.reduce((s, b) => s + b.pipes, 0);
+  const sumFit = birds.reduce((s, b) => s + b.fitness, 0);
+  records.push({
+    gen,
+    bestPipes: best,
+    avgPipes: +(sumPipes / birds.length).toFixed(2),
+    passedOne: birds.filter(b => b.pipes >= 1).length,
+    survivors: aliveCount(ai),
+    frames: ai.frame,
+    bestFitness: ranked[0].fitness,
+    avgFitness: Math.round(sumFit / birds.length),
+    cap: passCap || null,
+    graduated,
+    championGenes: ranked[0].brain.g.map(v => +v.toFixed(4))
+  });
+  history.push(best);
+  bestEver = Math.max(bestEver, best);
+  if (graduated && firstGoalGen === null) firstGoalGen = gen;
+  banner = { text: graduated ? `第 ${gen} 代达标毕业！` : `第 ${gen} 代全部淘汰`, good: graduated, t: 90 };
+  gen++;
+  ai = makeWorld(evolve(birds));
+}
+
+function aiTick() {
+  step(ai);
+  if (aliveCount(ai) === 0) finishGeneration(false);
+  else if (passCap > 0 && ai.passed >= passCap) finishGeneration(true);
+}
+
+function champion(w) {
+  let best = null;
+  for (const b of w.birds) {
+    if (!b.alive) continue;
+    if (!best || b.fitness > best.fitness || (b.fitness === best.fitness && b.elite && !best.elite)) best = b;
+  }
+  return best;
+}
+
+resetAI();
+
+if (typeof document !== 'undefined') {
+  const game = document.getElementById('game'), gx = game.getContext('2d');
+  const nn = document.getElementById('nn'), nx = nn.getContext('2d');
+  const curve = document.getElementById('curve'), cx = curve.getContext('2d');
+  const el = id => document.getElementById(id);
+  let lastChamp = null;
+
+  function drawBird(ctx, b, isChamp) {
+    const tilt = Math.max(-0.5, Math.min(0.9, b.vy / 10));
+    ctx.save();
+    ctx.translate(BIRD_X, b.y);
+    ctx.rotate(tilt);
+    const r = isChamp ? BIRD_R * 1.25 : BIRD_R;
+    if (isChamp) { ctx.shadowColor = '#fde047'; ctx.shadowBlur = 22; }
+    ctx.globalAlpha = isChamp ? 1 : 0.82;
+    ctx.fillStyle = b.brain ? `hsl(${b.hue},95%,62%)` : '#fde047';
+    ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+    if (b.elite || isChamp) { ctx.lineWidth = 3; ctx.strokeStyle = '#fde047'; ctx.stroke(); }
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.beginPath(); ctx.ellipse(-r * 0.35, b.flap > 0 ? -r * 0.35 : r * 0.15, r * 0.5, r * 0.28, -0.3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(r * 0.4, -r * 0.3, r * 0.32, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#0b1020'; ctx.beginPath(); ctx.arc(r * 0.5, -r * 0.3, r * 0.15, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fb923c'; ctx.beginPath(); ctx.moveTo(r * 0.8, 0); ctx.lineTo(r * 1.45, r * 0.15); ctx.lineTo(r * 0.8, r * 0.4); ctx.fill();
+    ctx.restore();
+  }
+
+  function drawGame(w, champ) {
+    const g = gx.createLinearGradient(0, 0, 0, PLAY_H);
+    g.addColorStop(0, '#0f1b3d'); g.addColorStop(1, '#1d2d5c');
+    gx.fillStyle = g; gx.fillRect(0, 0, W, H);
+    gx.fillStyle = 'rgba(255,255,255,0.5)';
+    for (let i = 0; i < 30; i++) {
+      const sx = ((i * 97 - w.frame * 0.3) % W + W) % W, sy = (i * 53) % (PLAY_H - 120);
+      gx.fillRect(sx, sy, 2, 2);
+    }
+    for (const p of w.pipes) {
+      const top = p.gapY - GAP / 2, bot = p.gapY + GAP / 2;
+      gx.fillStyle = '#22c55e'; gx.strokeStyle = '#14532d'; gx.lineWidth = 3;
+      gx.fillRect(p.x, 0, PIPE_W, top); gx.strokeRect(p.x, -3, PIPE_W, top + 3);
+      gx.fillRect(p.x, bot, PIPE_W, PLAY_H - bot); gx.strokeRect(p.x, bot, PIPE_W, PLAY_H - bot + 3);
+      gx.fillStyle = '#4ade80';
+      gx.fillRect(p.x - 6, top - 22, PIPE_W + 12, 22); gx.strokeRect(p.x - 6, top - 22, PIPE_W + 12, 22);
+      gx.fillRect(p.x - 6, bot, PIPE_W + 12, 22); gx.strokeRect(p.x - 6, bot, PIPE_W + 12, 22);
+    }
+    gx.fillStyle = '#3b2f1e'; gx.fillRect(0, PLAY_H, W, GROUND);
+    gx.fillStyle = '#65a30d'; gx.fillRect(0, PLAY_H, W, 14);
+    gx.fillStyle = '#4d7c0f';
+    for (let x = -((w.frame * PIPE_SPEED) % 24); x < W; x += 24) gx.fillRect(x, PLAY_H, 12, 14);
+
+    for (const b of w.birds) if (b.alive && b !== champ) drawBird(gx, b, false);
+    if (champ) drawBird(gx, champ, true);
+
+    gx.fillStyle = '#fff'; gx.font = 'bold 64px "Microsoft YaHei", sans-serif'; gx.textAlign = 'center';
+    gx.lineWidth = 6; gx.strokeStyle = '#0b1020';
+    gx.strokeText(String(w.passed), W / 2, 90); gx.fillText(String(w.passed), W / 2, 90);
+    if (paused) {
+      gx.fillStyle = 'rgba(0,0,0,0.45)'; gx.fillRect(0, 0, W, H);
+      gx.fillStyle = '#fde047'; gx.font = 'bold 48px "Microsoft YaHei", sans-serif'; gx.fillText('已暂停', W / 2, H / 2);
+    }
+  }
+
+  function wColor(w, a) { return w >= 0 ? `rgba(34,211,238,${a})` : `rgba(251,113,133,${a})`; }
+  function actFill(v) {
+    const t = Math.max(-1, Math.min(1, v));
+    return t >= 0 ? `rgba(34,211,238,${0.15 + 0.85 * t})` : `rgba(251,113,133,${0.15 + 0.85 * -t})`;
+  }
+
+  function drawNN(b) {
+    const cw = nn.width, ch = nn.height;
+    nx.clearRect(0, 0, cw, ch);
+    if (!b || !b.brain) {
+      nx.fillStyle = '#94a3b8'; nx.font = '26px "Microsoft YaHei", sans-serif'; nx.textAlign = 'center';
+      nx.fillText(humanMode ? '试玩模式：你就是这只鸟的大脑' : '等待下一代…', cw / 2, ch / 2);
+      return;
+    }
+    const br = b.brain;
+    const X = [130, 320, 480];
+    const ys = n => Array.from({ length: n }, (_, i) => ch / 2 + (i - (n - 1) / 2) * (n === 2 ? 120 : n === 4 ? 80 : 56));
+    const yi = ys(NI), yh = ys(NH), yo = ys(NO);
+    const lw = w => Math.min(9, 0.6 + Math.abs(w) * 3);
+    for (let i = 0; i < NI; i++) for (let j = 0; j < NH; j++) {
+      const w = br.wIH(i, j);
+      nx.strokeStyle = wColor(w, 0.25 + Math.min(0.7, Math.abs(w) * 0.35)); nx.lineWidth = lw(w);
+      nx.beginPath(); nx.moveTo(X[0], yi[i]); nx.lineTo(X[1], yh[j]); nx.stroke();
+    }
+    for (let i = 0; i < NH; i++) for (let j = 0; j < NO; j++) {
+      const w = br.wHO(i, j);
+      nx.strokeStyle = wColor(w, 0.25 + Math.min(0.7, Math.abs(w) * 0.35)); nx.lineWidth = lw(w);
+      nx.beginPath(); nx.moveTo(X[1], yh[i]); nx.lineTo(X[2], yo[j]); nx.stroke();
+    }
+    const node = (x, y, v, r) => {
+      nx.fillStyle = '#0b1020'; nx.beginPath(); nx.arc(x, y, r, 0, Math.PI * 2); nx.fill();
+      nx.fillStyle = actFill(v); nx.beginPath(); nx.arc(x, y, r, 0, Math.PI * 2); nx.fill();
+      nx.lineWidth = 3; nx.strokeStyle = '#e2e8f0'; nx.stroke();
+    };
+    const inLabels = ['高度', '速度', '距管', '缺口'];
+    nx.font = '22px "Microsoft YaHei", sans-serif'; nx.textBaseline = 'middle';
+    for (let i = 0; i < NI; i++) {
+      node(X[0], yi[i], br.inp[i], 18);
+      nx.fillStyle = '#e2e8f0'; nx.textAlign = 'right'; nx.fillText(inLabels[i], X[0] - 28, yi[i] - 10);
+      nx.fillStyle = '#94a3b8'; nx.font = '17px Consolas, monospace'; nx.fillText(br.inp[i].toFixed(2), X[0] - 28, yi[i] + 13);
+      nx.font = '22px "Microsoft YaHei", sans-serif';
+    }
+    for (let j = 0; j < NH; j++) node(X[1], yh[j], br.h[j], 16);
+    const jump = br.o[0] > br.o[1];
+    const outLabels = ['跳', '不跳'];
+    for (let j = 0; j < NO; j++) {
+      const win = (j === 0) === jump;
+      node(X[2], yo[j], br.o[j], 22);
+      if (win) { nx.lineWidth = 4; nx.strokeStyle = '#fde047'; nx.beginPath(); nx.arc(X[2], yo[j], 28, 0, Math.PI * 2); nx.stroke(); }
+      nx.textAlign = 'left'; nx.fillStyle = win ? '#fde047' : '#e2e8f0';
+      nx.font = (win ? 'bold ' : '') + '26px "Microsoft YaHei", sans-serif';
+      nx.fillText(outLabels[j], X[2] + 38, yo[j] - 10);
+      nx.font = '17px Consolas, monospace'; nx.fillStyle = '#94a3b8';
+      nx.fillText(br.o[j].toFixed(2), X[2] + 38, yo[j] + 16);
+    }
+    nx.textAlign = 'center'; nx.fillStyle = '#64748b'; nx.font = '18px "Microsoft YaHei", sans-serif';
+    nx.fillText('输入层', X[0], 18); nx.fillText('隐藏层', X[1], 18); nx.fillText('输出层', X[2], 18);
+    nx.textBaseline = 'alphabetic';
+  }
+
+  function drawCurve() {
+    const tw = Math.max(300, Math.round(curve.clientWidth)), th = Math.max(120, Math.round(curve.clientHeight));
+    if (curve.width !== tw || curve.height !== th) { curve.width = tw; curve.height = th; }
+    const cw = curve.width, ch = curve.height;
+    const L = 70, R = 20, T = 18, B = 42;
+    cx.clearRect(0, 0, cw, ch);
+    const n = history.length;
+    const maxX = Math.max(10, n), maxY = Math.max(5, ...history, 0);
+    const px = i => L + (i / Math.max(1, maxX - 1)) * (cw - L - R);
+    const py = v => ch - B - (v / maxY) * (ch - T - B);
+    cx.strokeStyle = '#26314f'; cx.lineWidth = 1; cx.fillStyle = '#94a3b8';
+    cx.font = '18px "Microsoft YaHei", sans-serif'; cx.textAlign = 'right'; cx.textBaseline = 'middle';
+    const yStep = Math.max(1, Math.ceil(maxY / 4));
+    for (let v = 0; v <= maxY; v += yStep) {
+      cx.beginPath(); cx.moveTo(L, py(v)); cx.lineTo(cw - R, py(v)); cx.stroke();
+      cx.fillText(String(v), L - 10, py(v));
+    }
+    cx.textAlign = 'center'; cx.textBaseline = 'top';
+    const xStep = Math.max(1, Math.ceil(maxX / 12));
+    for (let i = 0; i < maxX; i += xStep) cx.fillText(String(i + 1), px(i), ch - B + 8);
+    cx.fillText('代数', cw / 2, ch - 20);
+    cx.save(); cx.translate(18, ch / 2 - 10); cx.rotate(-Math.PI / 2); cx.textBaseline = 'middle'; cx.fillText('过管数', 0, 0); cx.restore();
+    if (!n) {
+      cx.fillStyle = '#64748b'; cx.font = '22px "Microsoft YaHei", sans-serif'; cx.textBaseline = 'middle';
+      cx.fillText('第一代结束后开始绘制曲线', cw / 2, ch / 2 - 10);
+      return;
+    }
+    const capsShown = [...new Set(records.filter(r => r.graduated).map(r => r.cap))];
+    cx.setLineDash([10, 8]); cx.strokeStyle = '#4ade80'; cx.lineWidth = 2;
+    cx.fillStyle = '#4ade80'; cx.textAlign = 'left'; cx.textBaseline = 'bottom'; cx.font = '17px "Microsoft YaHei", sans-serif';
+    for (const c of capsShown) {
+      cx.beginPath(); cx.moveTo(L, py(c)); cx.lineTo(cw - R, py(c)); cx.stroke();
+      cx.fillText('上限 ' + c, L + 6, py(c) - 2);
+    }
+    if (firstGoalGen !== null) {
+      const x = px(firstGoalGen - 1);
+      cx.beginPath(); cx.moveTo(x, T); cx.lineTo(x, ch - B); cx.stroke();
+      cx.textAlign = x > cw - 220 ? 'right' : 'left';
+      cx.textBaseline = 'top';
+      cx.fillText(` 第 ${firstGoalGen} 代首次达标 `, x, T + 22);
+    }
+    cx.setLineDash([]);
+    cx.strokeStyle = '#22d3ee'; cx.lineWidth = 2.5; cx.beginPath();
+    records.forEach((r, i) => i ? cx.lineTo(px(i), py(r.avgPipes)) : cx.moveTo(px(i), py(r.avgPipes)));
+    cx.stroke();
+    cx.strokeStyle = '#fde047'; cx.lineWidth = 3.5; cx.beginPath();
+    history.forEach((v, i) => i ? cx.lineTo(px(i), py(v)) : cx.moveTo(px(i), py(v)));
+    cx.stroke();
+    if (n <= 80) records.forEach((r, i) => {
+      cx.fillStyle = r.graduated ? '#4ade80' : '#fde047';
+      cx.beginPath(); cx.arc(px(i), py(r.bestPipes), r.graduated ? 6 : 4.5, 0, Math.PI * 2); cx.fill();
+    });
+  }
+
+  function updateStats() {
+    if (humanMode) {
+      el('sGen').textContent = '—';
+      el('sAlive').textContent = aliveCount(human) + '/1';
+      el('sPipes').textContent = human.passed;
+    } else {
+      el('sGen').textContent = gen;
+      el('sAlive').textContent = aliveCount(ai) + '/' + POP;
+      el('sPipes').textContent = ai.passed;
+    }
+    el('sBest').textContent = Math.max(bestEver, humanMode ? 0 : ai.passed);
+    el('sGoal').textContent = firstGoalGen === null ? '—' : `第${firstGoalGen}代`;
+  }
+
+  function drawBanner() {
+    if (!banner || humanMode) return;
+    gx.save();
+    gx.globalAlpha = Math.min(1, banner.t / 30);
+    gx.fillStyle = banner.good ? 'rgba(22,101,52,0.9)' : 'rgba(127,29,29,0.85)';
+    gx.fillRect(0, H / 2 - 50, W, 100);
+    gx.fillStyle = '#fff'; gx.font = 'bold 40px "Microsoft YaHei", sans-serif';
+    gx.textAlign = 'center'; gx.textBaseline = 'middle';
+    gx.fillText(banner.text, W / 2, H / 2);
+    gx.restore();
+    if (!paused && --banner.t <= 0) banner = null;
+  }
+
+  let lastHistLen = -1;
+  function frame() {
+    if (!paused) {
+      if (humanMode) {
+        if (human.started && aliveCount(human) > 0) { step(human, humanJumpQueued); humanJumpQueued = false; }
+      } else {
+        for (let s = 0; s < speed; s++) aiTick();
+      }
+    }
+    const w = humanMode ? human : ai;
+    const champ = humanMode ? null : champion(ai);
+    if (champ) lastChamp = champ;
+    drawGame(w, champ);
+    drawBanner();
+    if (humanMode) {
+      gx.fillStyle = '#fde047'; gx.font = 'bold 30px "Microsoft YaHei", sans-serif'; gx.textAlign = 'center';
+      if (!human.started) gx.fillText('点击画面或按空格开始', W / 2, H / 2 + 60);
+      else if (!aliveCount(human)) gx.fillText('撞了！点击再来一次', W / 2, H / 2 + 60);
+    }
+    drawNN(humanMode ? null : (champ || lastChamp));
+    if (history.length !== lastHistLen) {
+      drawCurve();
+      lastHistLen = history.length;
+      if (el('dataDlg').classList.contains('show')) renderData();
+    }
+    updateStats();
+    requestAnimationFrame(frame);
+  }
+
+  function fmtTime(d) {
+    const p = x => String(x).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  }
+
+  function summaryData() {
+    const last10 = history.slice(-10);
+    const avg10 = last10.length ? (last10.reduce((a, b) => a + b, 0) / last10.length).toFixed(1) : '—';
+    const grads = records.filter(r => r.graduated).length;
+    return [
+      ['实验开始', fmtTime(startTime)],
+      ['已完成代数', records.length],
+      ['当前过管上限', passCap || '不限'],
+      ['首次达标', firstGoalGen === null ? '尚未达标' : `第 ${firstGoalGen} 代`],
+      ['达标代数 / 总代数', `${grads} / ${records.length}`],
+      ['历史最佳过管', bestEver],
+      ['最近 10 代平均最佳', avg10],
+      ['种群 / 网络', `${POP} 只 / ${NI}-${NH}-${NO}`],
+      ['精英 / 候选池', `前 ${ELITE} 名 / 前 ${POOL} 名`],
+      ['变异率 / 幅度', `${MUT_RATE * 100}% / ${MUT_AMP}`],
+      ['适应度', `存活帧数 + 过管数×${PASS_REWARD}`],
+      ['首管反应时间', `约 ${Math.round((FIRST_PIPE_X - BIRD_X) / PIPE_SPEED)} 帧`]
+    ];
+  }
+
+  function renderData() {
+    el('summary').innerHTML = summaryData().map(([k, v]) => `<div>${k}：<b>${v}</b></div>`).join('');
+    el('tbody').innerHTML = records.slice().reverse().map(r =>
+      `<tr><td>${r.gen}</td><td>${r.bestPipes}</td><td>${r.avgPipes.toFixed(2)}</td><td>${r.passedOne}/${POP}</td>` +
+      `<td>${r.survivors}</td><td>${r.frames}</td><td>${r.bestFitness}</td>` +
+      (r.graduated ? `<td class="ok">达标（上限 ${r.cap}）</td>` : `<td class="dead">全部淘汰</td>`) + `</tr>`
+    ).join('') || `<tr><td colspan="8" style="text-align:center;color:#64748b">还没有完成的代，等第一代结束</td></tr>`;
+  }
+
+  function download(name, text, type) {
+    const blob = new Blob([text], { type });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  function stamp() { return fmtTime(startTime).replace(/[-: ]/g, '').slice(0, 12); }
+
+  el('btnData').addEventListener('click', () => { renderData(); el('dataDlg').classList.add('show'); });
+  el('btnClose').addEventListener('click', () => el('dataDlg').classList.remove('show'));
+  el('dataDlg').addEventListener('click', e => { if (e.target === el('dataDlg')) el('dataDlg').classList.remove('show'); });
+  el('btnCSV').addEventListener('click', () => {
+    const head = '代数,最佳过管,平均过管,过1管以上的鸟,结束时存活,本代时长帧,最佳适应度,平均适应度,过管上限,结束方式';
+    const rows = records.map(r => [r.gen, r.bestPipes, r.avgPipes, r.passedOne, r.survivors, r.frames, r.bestFitness, r.avgFitness, r.cap || '不限', r.graduated ? '达标' : '全部淘汰'].join(','));
+    download(`flappy进化实验_${stamp()}.csv`, '\ufeff' + [head, ...rows].join('\r\n'), 'text/csv');
+  });
+  el('btnJSON').addEventListener('click', () => {
+    const data = {
+      experiment: 'Flappy 小鸟进化实验室',
+      startedAt: fmtTime(startTime),
+      exportedAt: fmtTime(new Date()),
+      params: { population: POP, network: [NI, NH, NO], elite: ELITE, pool: POOL, mutationRate: MUT_RATE, mutationAmp: MUT_AMP, passReward: PASS_REWARD, passCap: passCap || null, firstPipeFrames: Math.round((FIRST_PIPE_X - BIRD_X) / PIPE_SPEED) },
+      summary: { generations: records.length, firstGoalGen, bestEver },
+      records
+    };
+    download(`flappy进化实验_${stamp()}.json`, JSON.stringify(data, null, 2), 'application/json');
+  });
+
+  function humanInput() {
+    if (!humanMode || paused) return;
+    if (!human.started) { human.started = true; humanJumpQueued = true; return; }
+    if (!aliveCount(human)) { resetHuman(); return; }
+    humanJumpQueued = true;
+  }
+  game.addEventListener('mousedown', humanInput);
+  game.addEventListener('touchstart', e => { e.preventDefault(); humanInput(); }, { passive: false });
+  window.addEventListener('keydown', e => {
+    if (e.code === 'Space') { e.preventDefault(); humanInput(); }
+    if (e.code === 'Escape') el('dataDlg').classList.remove('show');
+  });
+
+  document.querySelectorAll('button[data-speed]').forEach(btn => btn.addEventListener('click', () => {
+    speed = Number(btn.dataset.speed);
+    document.querySelectorAll('button[data-speed]').forEach(b => b.classList.toggle('active', b === btn));
+  }));
+  document.querySelectorAll('button[data-cap]').forEach(btn => btn.addEventListener('click', () => {
+    passCap = Number(btn.dataset.cap);
+    document.querySelectorAll('button[data-cap]').forEach(b => b.classList.toggle('active', b === btn));
+  }));
+  el('btnPause').addEventListener('click', () => {
+    paused = !paused;
+    el('btnPause').textContent = paused ? '继续' : '暂停';
+    el('btnPause').classList.toggle('active', paused);
+  });
+  el('btnReset').addEventListener('click', () => {
+    if (humanMode) resetHuman(); else { resetAI(); lastChamp = null; lastHistLen = -1; }
+  });
+  el('btnHuman').addEventListener('click', () => {
+    humanMode = !humanMode;
+    if (humanMode) resetHuman();
+    el('btnHuman').textContent = humanMode ? '回到 AI 进化' : '我来试玩';
+    el('btnHuman').classList.toggle('active', humanMode);
+    el('nnTitle').textContent = humanMode ? '试玩模式' : '当前冠军鸟的大脑（4-6-2 神经网络）';
+  });
+
+  window.addEventListener('resize', () => { lastHistLen = -1; });
+  requestAnimationFrame(frame);
+}
+</script>
+</body>
+</html>
